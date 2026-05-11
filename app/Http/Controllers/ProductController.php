@@ -65,7 +65,7 @@ class ProductController extends Controller
             ->store('products', 'public');
     }
 
-    // Simpan product
+    // Simpan product 
     Product::create($validated);
 
     return redirect()
