@@ -21,6 +21,8 @@ return new class extends Migration
                   ->constrained()
                   ->nullOnDelete();
 
+            $table->string('table_number')->after('user_id');
+            
             // total pembayaran
             $table->decimal('total_price', 12, 2);
 

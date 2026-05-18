@@ -11,11 +11,21 @@ class ProductController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $products = Product::latest()->get();
+        $category = $request->get('category');
 
-        return view('products.index', compact('products'));
+        $query = Product::with('category')->latest();
+
+        if ($category && $category != 'all') {
+            $query->whereHas('category', function ($q) use ($category) {
+                $q->where('name', $category);
+            });
+        }
+
+        $products = $query->get();
+
+        return view('products.index', compact('products', 'category'));
     }
 
     /**
@@ -26,14 +36,6 @@ class ProductController extends Controller
         $categories = Category::all();
 
         return view('products.create', compact('categories'));
-        $validated = $request->validate([
-    'category_id' => 'required|exists:categories,id',
-    'name' => 'required|string|max:255',
-    'description' => 'nullable|string',
-    'price' => 'required|numeric|min:0',
-    'stock' => 'required|integer|min:0',
-    'image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
-]);
     }
 
     /**
