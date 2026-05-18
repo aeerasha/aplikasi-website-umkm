@@ -1,116 +1,121 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Tambah Produk</title>
-</head>
-<body>
+@extends('adminlte::page')
 
+@section('title', 'Tambah Produk')
+
+@section('content_header')
     <h1>Tambah Produk</h1>
+@stop
 
-    {{-- Error Validation --}}
-    @if ($errors->any())
+@section('content')
 
-        <div style="color:red;">
+<div class="card">
 
-            <ul>
-                @foreach ($errors->all() as $error)
+    <div class="card-body">
 
-                    <li>{{ $error }}</li>
+        <form action="{{ route('products.store') }}"
+              method="POST"
+              enctype="multipart/form-data">
 
-                @endforeach
-            </ul>
+            @csrf
 
-        </div>
+            {{-- Nama Produk --}}
+            <div class="form-group">
+                <label>Nama Produk</label>
 
-    @endif
+                <input type="text"
+                       name="name"
+                       class="form-control"
+                       value="{{ old('name') }}"
+                       required>
 
-    <form action="{{ route('products.store') }}"
-          method="POST"
-          enctype="multipart/form-data">
+                @error('name')
+                    <small class="text-danger">
+                        {{ $message }}
+                    </small>
+                @enderror
+            </div>
 
-        @csrf
 
-        <div>
-    <label>Kategori</label>
-    <br>
+            {{-- Kategori --}}
+            <div class="mb-3">
+                <label>Jenis Produk</label>
 
-    <select name="category_id">
+                <select name="category_id" class="form-control" required>
 
-        <option value="">
-            -- Pilih Kategori --
-        </option>
+                    <option value="">-- Pilih Jenis --</option>
 
-        @foreach($categories as $category)
+                    @foreach($categories as $category)
+                        <option value="{{ $category->id }}">
+                            {{ $category->name }}
+                        </option>
+                    @endforeach
 
-            <option value="{{ $category->id }}">
+                </select>
+            </div>
 
-                {{ $category->name }}
 
-            </option>
+            {{-- Deskripsi --}}
+            <div class="form-group">
+                <label>Deskripsi</label>
 
-        @endforeach
+                <textarea name="description"
+                          class="form-control"
+                          rows="4"></textarea>
+            </div>
 
-    </select>
+
+            {{-- Harga --}}
+            <div class="form-group">
+                <label>Harga</label>
+
+                <input type="number"
+                       name="price"
+                       class="form-control"
+                       value="{{ old('price') }}"
+                       required>
+            </div>
+
+
+            {{-- Stock --}}
+            <div class="form-group">
+                <label>Stock</label>
+
+                <input type="number"
+                       name="stock"
+                       class="form-control"
+                       value="{{ old('stock') }}"
+                       required>
+            </div>
+
+
+            {{-- Gambar --}}
+            <div class="form-group">
+                <label>Gambar Produk</label>
+
+                <input type="file"
+                       name="image"
+                       class="form-control">
+            </div>
+
+
+            <button type="submit"
+                    class="btn btn-primary">
+
+                Simpan
+
+            </button>
+
+            <a href="{{ route('products.index') }}"
+               class="btn btn-secondary">
+
+                Kembali
+
+            </a>
+
+        </form>
+
+    </div>
+
 </div>
 
-<br>
-
-        <div>
-            <label>Nama Produk</label>
-            <br>
-
-            <input type="text"
-                   name="name"
-                   value="{{ old('name') }}">
-        </div>
-
-        <br>
-
-        <div>
-            <label>Deskripsi</label>
-            <br>
-
-            <textarea name="description">{{ old('description') }}</textarea>
-        </div>
-
-        <br>
-
-        <div>
-            <label>Harga</label>
-            <br>
-
-            <input type="number"
-                   name="price"
-                   value="{{ old('price') }}">
-        </div>
-
-        <br>
-
-        <div>
-            <label>Stock</label>
-            <br>
-
-            <input type="number"
-                   name="stock"
-                   value="{{ old('stock') }}">
-        </div>
-
-        <br>
-
-        <div>
-            <label>Gambar</label>
-            <br>
-
-            <input type="file" name="image">
-        </div>
-
-        <br>
-
-        <button type="submit">
-            Simpan Produk
-        </button>
-
-    </form>
-
-</body>
-</html>
+@stop
