@@ -6,27 +6,69 @@ class UlasanController {
         $this->db = Database::getInstance();
     }
 
-    // 1. TAMPILAN ADMIN
-    public function adminIndex() {
+    // 1. TAMPILAN ADMIN — LEFT JOIN agar ulasan tamu (user_id=NULL) ikut tampil
+    public function adminIndex(): void {
         requireRole('admin');
-        $ulasan = $this->db->query("SELECT ulasan.*, users.nama as nama_user, produk.nama as nama_produk 
-                                    FROM ulasan 
-                                    JOIN users ON ulasan.user_id = users.id 
-                                    JOIN produk ON ulasan.produk_id = produk.id 
-                                    ORDER BY ulasan.id DESC")->fetchAll(PDO::FETCH_OBJ);
-        
-        renderView('admin/ulasan/index', compact('ulasan'));
+
+        $search = trim($_GET['search'] ?? '');
+        $params = [];
+
+        $sql = "
+            SELECT
+                ul.*,
+                COALESCE(u.nama, ul.nama_pelanggan, 'Tamu') AS nama_user,
+                pr.nama AS nama_produk
+            FROM ulasan ul
+            LEFT JOIN users  u  ON u.id  = ul.user_id
+            LEFT JOIN produk pr ON pr.id = ul.produk_id
+            WHERE 1=1
+        ";
+
+        if ($search) {
+            $sql   .= " AND (ul.nama_pelanggan LIKE ? OR pr.nama LIKE ? OR ul.komentar LIKE ?)";
+            $params = ["%$search%", "%$search%", "%$search%"];
+        }
+
+        $sql .= " ORDER BY ul.id DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $ulasan = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+        renderView('admin/ulasan/index', compact('ulasan', 'search'));
     }
 
-    // 2. TAMPILAN CUSTOMER
-    public function index() {
-        $ulasan = $this->db->query("SELECT ulasan.*, users.nama as nama_user, produk.nama as nama_produk 
-                                    FROM ulasan 
-                                    JOIN users ON ulasan.user_id = users.id 
-                                    JOIN produk ON ulasan.produk_id = produk.id 
-                                    ORDER BY ulasan.id DESC")->fetchAll(PDO::FETCH_OBJ);
-        
-        renderCustomer('customer/ulasan/index', compact('ulasan')); 
+    // 2. TAMPILAN CUSTOMER — LEFT JOIN, ulasan tamu tetap muncul
+    public function index(): void {
+        $stmt = $this->db->prepare("
+            SELECT
+                ul.*,
+                COALESCE(u.nama, ul.nama_pelanggan, 'Tamu') AS nama_user,
+                pr.nama AS nama_produk
+            FROM ulasan ul
+            LEFT JOIN users  u  ON u.id  = ul.user_id
+            LEFT JOIN produk pr ON pr.id = ul.produk_id
+            ORDER BY ul.id DESC
+        ");
+        $stmt->execute();
+        $ulasan = $stmt->fetchAll(PDO::FETCH_OBJ);
+
+        renderCustomer('customer/ulasan/index', compact('ulasan'));
+    }
+
+    // 8. HAPUS ULASAN DARI SISI ADMIN (tambahan baru)
+    public function adminDestroy(): void {
+        requireRole('admin');
+
+        $id = (int)($_POST['id'] ?? 0);
+        if (!$id) {
+            flash('error', 'ID ulasan tidak valid.');
+            redirect('/admin/ulasan');
+        }
+
+        $this->db->prepare("DELETE FROM ulasan WHERE id = ?")->execute([$id]);
+        flash('success', 'Ulasan berhasil dihapus.');
+        redirect('/admin/ulasan');
     }
 
     // 3. FORM TAMBAH
@@ -35,25 +77,40 @@ class UlasanController {
         renderCustomer('customer/ulasan/create', compact('produkList'));
     }
 
-    // 4. PROSES SIMPAN
-    public function store() {
-        $user = auth(); // Mengambil data user yang sedang login
-        $is_anonymous = isset($_POST['is_anonymous']) ? 1 : 0;
+    // 4. PROSES SIMPAN — tanpa user_id login, pakai session tamu
+    public function store(): void {
+        requireCustomer();
 
-        // Pastikan kolom 'nama_pelanggan' ikut dimasukkan dalam INSERT
-        $stmt = $this->db->prepare("INSERT INTO ulasan (user_id, produk_id, rating, komentar, is_anonymous, nama_pelanggan) VALUES (?, ?, ?, ?, ?, ?)");
-        
-        // Kirim $user['nama'] ke database
-        $stmt->execute([
-            $user['id'], 
-            $_POST['produk_id'], 
-            (int)$_POST['rating'], 
-            $_POST['ulasan'], 
+        $customer     = $_SESSION['customer'];
+        $produk_id    = (int)($_POST['produk_id'] ?? 0);
+        $rating       = min(5, max(1, (int)($_POST['rating'] ?? 5)));
+        $komentar     = trim($_POST['ulasan'] ?? $_POST['komentar'] ?? '');
+        $is_anonymous = isset($_POST['is_anonymous']) ? 1 : 0;
+        $nama_tampil  = $is_anonymous ? 'Anonim' : $customer['nama'];
+
+        if (!$produk_id) {
+            flash('error', 'Pilih produk terlebih dahulu.');
+            redirect('/customer/ulasan/create');
+        }
+        if (empty($komentar)) {
+            flash('error', 'Komentar tidak boleh kosong.');
+            redirect('/customer/ulasan/create');
+        }
+
+        // user_id = NULL karena customer tidak punya akun login
+        $this->db->prepare(
+            "INSERT INTO ulasan (user_id, produk_id, nama_pelanggan, rating, komentar, is_anonymous, created_at)
+             VALUES (NULL, ?, ?, ?, ?, ?, ?)"
+        )->execute([
+            $produk_id,
+            $nama_tampil,
+            $rating,
+            $komentar,
             $is_anonymous,
-            $user['nama'] // Menambahkan nama pelanggan dari sesi login
+            date('Y-m-d H:i:s'),
         ]);
 
-        flash('success', 'Ulasan berhasil dikirim!');
+        flash('success', 'Ulasan berhasil dikirim! Terima kasih.');
         redirect('/customer/ulasan');
     }
 

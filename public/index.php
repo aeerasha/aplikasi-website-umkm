@@ -30,8 +30,7 @@ $routes = [
     // ── Auth ─────────────────────────────────────────────────────────
     'GET /login'     => fn() => (new AuthController())->showLogin(),
     'POST /login'    => fn() => (new AuthController())->login(),
-    'GET /register'  => fn() => (new AuthController())->showRegister(),
-    'POST /register' => fn() => (new AuthController())->register(),
+    // register publik dinonaktifkan
     'GET /logout'    => fn() => (new AuthController())->logout(),
 
     // ── Root ─────────────────────────────────────────────────────────
@@ -40,7 +39,7 @@ $routes = [
         match ($_SESSION['user']['role']) {
             'admin'   => redirect('/admin/dashboard'),
             'pegawai' => redirect('/pegawai/dashboard'),
-            default   => redirect('/customer/dashboard'),
+            default => redirect('/customer/identitas'),
         };
     },
 
@@ -48,16 +47,93 @@ $routes = [
     'GET /admin/dashboard' => function() {
         requireRole('admin');
         $db = Database::getInstance();
+
+        // ── Kartu statistik (semua real-time dari DB) ──────────────────────────
         $totalProduk    = $db->query("SELECT COUNT(*) FROM produk")->fetchColumn();
         $totalPegawai   = $db->query("SELECT COUNT(*) FROM pegawai")->fetchColumn();
         $totalPesanan   = $db->query("SELECT COUNT(*) FROM pesanan")->fetchColumn();
-        $totalPelanggan = $db->query("SELECT COUNT(*) FROM users WHERE role='pelanggan'")->fetchColumn();
-        $totalPemasukan = $db->query("SELECT COALESCE(SUM(jumlah),0) FROM pembayaran WHERE status='lunas'")->fetchColumn();
-        $produkTerlaris = $db->query("SELECT p.nama, COUNT(ps.id) as total FROM pesanan ps JOIN produk p ON p.id=ps.produk_id GROUP BY ps.produk_id ORDER BY total DESC LIMIT 5")->fetchAll();
-        $pesananTerbaru = $db->query("SELECT ps.*, p.nama as nama_produk FROM pesanan ps LEFT JOIN produk p ON p.id=ps.produk_id ORDER BY ps.created_at DESC LIMIT 8")->fetchAll();
-        $stokRendah     = $db->query("SELECT * FROM stok WHERE jumlah <= stok_minimum ORDER BY jumlah ASC LIMIT 5")->fetchAll();
-        $menungguKonfirmasi = $db->query("SELECT COUNT(*) FROM pembayaran WHERE status='menunggu_konfirmasi'")->fetchColumn();
-        renderView('admin/dashboard', compact('totalProduk','totalPegawai','totalPesanan','totalPelanggan','totalPemasukan','produkTerlaris','pesananTerbaru','stokRendah','menungguKonfirmasi'));
+        $totalPelanggan = $db->query("SELECT COUNT(*) FROM users WHERE role = 'pelanggan'")->fetchColumn();
+
+        // Total pemasukan: hanya pembayaran lunas
+        $totalPemasukan = $db->query(
+            "SELECT COALESCE(SUM(jumlah), 0) FROM pembayaran WHERE status = 'lunas'"
+        )->fetchColumn();
+
+        // Total pesanan selesai dan pendapatan bersih dari pesanan selesai
+        $totalSelesai = $db->query(
+            "SELECT COUNT(*) FROM pesanan WHERE status = 'selesai'"
+        )->fetchColumn();
+
+        $pendapatanSelesai = $db->query(
+            "SELECT COALESCE(SUM(ps.total_harga), 0)
+             FROM pesanan ps
+             WHERE ps.status = 'selesai'"
+        )->fetchColumn();
+
+        // Notifikasi pembayaran menunggu konfirmasi
+        $menungguKonfirmasi = $db->query(
+            "SELECT COUNT(*) FROM pembayaran WHERE status = 'menunggu_konfirmasi'"
+        )->fetchColumn();
+
+        // ── Produk terlaris: SUM dari detail_pesanan, fallback ke pesanan.produk_id ──
+        $tableExists = $db->query(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='detail_pesanan'"
+        )->fetchColumn();
+
+        $produkTerlaris = [];
+        if ($tableExists) {
+            $produkTerlaris = $db->query("
+                SELECT pr.nama,
+                       SUM(dp.jumlah) AS total
+                FROM detail_pesanan dp
+                JOIN produk pr ON pr.id = dp.produk_id
+                GROUP BY dp.produk_id, pr.nama
+                ORDER BY total DESC
+                LIMIT 5
+            ")->fetchAll();
+        }
+
+        // Fallback: pakai COUNT baris pesanan via kolom produk_id lama
+        if (empty($produkTerlaris)) {
+            $produkTerlaris = $db->query("
+                SELECT pr.nama,
+                       COUNT(ps.id) AS total
+                FROM pesanan ps
+                JOIN produk pr ON pr.id = ps.produk_id
+                WHERE ps.produk_id IS NOT NULL
+                GROUP BY ps.produk_id, pr.nama
+                ORDER BY total DESC
+                LIMIT 5
+            ")->fetchAll();
+        }
+
+        // ── Pesanan terbaru: ambil nama produk dari detail_pesanan atau produk_id lama ──
+        $pesananTerbaru = $db->query("
+            SELECT ps.*,
+                   COALESCE(
+                       (SELECT dp.nama_produk
+                        FROM detail_pesanan dp
+                        WHERE dp.pesanan_id = ps.id
+                        ORDER BY dp.id ASC LIMIT 1),
+                       pr.nama,
+                       '-'
+                   ) AS nama_produk
+            FROM pesanan ps
+            LEFT JOIN produk pr ON pr.id = ps.produk_id
+            ORDER BY ps.created_at DESC
+            LIMIT 8
+        ")->fetchAll();
+
+        // ── Stok kritis ────────────────────────────────────────────────────────
+        $stokRendah = $db->query(
+            "SELECT * FROM stok WHERE jumlah <= stok_minimum ORDER BY jumlah ASC LIMIT 5"
+        )->fetchAll();
+
+        renderView('admin/dashboard', compact(
+            'totalProduk', 'totalPegawai', 'totalPesanan', 'totalPelanggan',
+            'totalPemasukan', 'totalSelesai', 'pendapatanSelesai',
+            'produkTerlaris', 'pesananTerbaru', 'stokRendah', 'menungguKonfirmasi'
+        ));
     },
 
     // ── ADMIN Users ───────────────────────────────────────────────────
@@ -95,7 +171,18 @@ $routes = [
         $id     = (int)($_POST['id'] ?? 0);
         $status = $_POST['status'] ?? 'lunas';
         $db     = Database::getInstance();
-        $db->prepare("UPDATE pembayaran SET status=? WHERE id=?")->execute([$status, $id]);
+        $db->prepare("
+            UPDATE pembayaran
+            SET status=?,
+                verified_by=?,
+                verified_at=?
+            WHERE id=?
+        ")->execute([
+            $status,
+            $_SESSION['user']['id'],
+            date('Y-m-d H:i:s'),
+            $id
+        ]);
         if ($status === 'lunas') {
             // update status pesanan juga
             $pid = $db->prepare("SELECT pesanan_id FROM pembayaran WHERE id=?");
@@ -148,8 +235,10 @@ $routes = [
     'GET /pembayaran/edit'    => fn() => (new PembayaranController())->edit(),
     'POST /pembayaran/update' => fn() => (new PembayaranController())->update(),
     'POST /pembayaran/delete' => fn() => (new PembayaranController())->destroy(),
+    'POST /pembayaran/prosesBayarKasir' => fn() => (new PembayaranController())->prosesBayarKasir(),
 
     'GET /admin/ulasan'         => fn() => (new UlasanController())->adminIndex(),
+    'POST /admin/ulasan/delete' => fn() => (new UlasanController())->adminDestroy(),
 
 
     // ── ADMIN Inventaris ──────────────────────────────────────────────
@@ -176,8 +265,70 @@ $routes = [
     'GET /pegawai/profile'         => fn() => (new PegawaiDashboardController())->profile(),
 
     // ── CUSTOMER ──────────────────────────────────────────────────────
+    // Identitas tamu — bypass CustomerController agar tidak terkena requireCustomer()
+    'GET /customer/identitas'      => function() {
+        if (!empty($_SESSION['customer']['nama'])) { redirect('/customer/katalog'); }
+        include BASE_PATH . '/resources/views/customer/identitas.php';
+    },
+    'POST /customer/identitas' => function() {
+
+        $nama       = trim($_POST['nama'] ?? '');
+        $no_hp      = trim($_POST['no_hp'] ?? '');
+        $nomor_meja = trim($_POST['nomor_meja'] ?? '');
+
+        if (!$nama || !$no_hp || !$nomor_meja) {
+            flash('error','Semua data wajib diisi');
+            redirect('/customer/identitas');
+        }
+
+        $db = Database::getInstance();
+
+        $stmt = $db->prepare(
+            "INSERT INTO customer_guest
+            (nama, telepon, nomor_meja)
+            VALUES (?,?,?)"
+        );
+
+        $stmt->execute([
+            $nama,
+            $no_hp,
+            $nomor_meja
+        ]);
+
+        $customerId = $db->lastInsertId();
+
+        $_SESSION['customer'] = [
+            'id' => $customerId,
+            'nama' => $nama,
+            'no_hp' => $no_hp,
+            'nomor_meja' => $nomor_meja
+        ];
+
+        redirect('/customer/katalog');
+    },
+
+    'GET /customer/logout' => function() {
+
+        unset($_SESSION['customer']);
+
+        redirect('/customer/identitas');
+    },
+    // QRIS & konfirmasi bayar — bypass admin requireRole
+    'GET /customer/qris' => function() {
+        $controller = new PembayaranController(false);
+        $controller->showQris();
+    },
+    'POST /customer/sudah-bayar' => function() {
+        $controller = new PembayaranController(false);
+        $controller->konfirmasiSudahBayar();
+    },
     'GET /customer/dashboard'      => fn() => (new CustomerController())->dashboard(),
     'GET /customer/katalog'        => fn() => (new CustomerController())->katalog(),
+    // Keranjang belanja
+    'GET /customer/keranjang'      => fn() => (new CustomerController())->keranjang(),
+    'POST /customer/keranjang/tambah' => fn() => (new CustomerController())->tambahKeranjang(),
+    'POST /customer/keranjang/hapus'  => fn() => (new CustomerController())->hapusKeranjang(),
+    'POST /customer/keranjang/kosongkan' => fn() => (new CustomerController())->kosongkanKeranjang(),
     'GET /customer/pesanan-saya'   => fn() => (new CustomerController())->pesananSaya(),
     'GET /customer/buat-pesanan'   => fn() => (new CustomerController())->buatPesanan(),
     'POST /customer/buat-pesanan'  => fn() => (new CustomerController())->storePesanan(),

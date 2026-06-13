@@ -29,23 +29,105 @@ class PegawaiDashboardController {
 
     public function antrian(): void {
         $status = $_GET['status'] ?? '';
-        $sql    = "SELECT ps.*, p.nama as nama_produk FROM pesanan ps LEFT JOIN produk p ON p.id=ps.produk_id WHERE 1=1";
         $params = [];
-        if ($status) { $sql .= " AND ps.status=?"; $params[] = $status; }
+
+        $sql = "
+            SELECT ps.*,
+                   pb.status  AS status_bayar,
+                   pb.metode  AS metode_bayar
+            FROM pesanan ps
+            LEFT JOIN pembayaran pb ON pb.pesanan_id = ps.id
+            WHERE 1=1
+        ";
+
+        if ($status) {
+            $sql    .= " AND ps.status = ?";
+            $params[] = $status;
+        }
+
         $sql .= " ORDER BY ps.created_at ASC";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         $pesanans = $stmt->fetchAll();
-        renderPegawai('pegawai/antrian', compact('pesanans','status'));
+
+        // Ambil semua detail item dalam satu query (hindari N+1)
+        $detailMap = [];
+        if (!empty($pesanans)) {
+            $ids = implode(',', array_map(fn($p) => (int)$p->id, $pesanans));
+
+            // Cek apakah tabel detail_pesanan sudah ada
+            $tableExists = $this->db->query(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='detail_pesanan'"
+            )->fetchColumn();
+
+            if ($tableExists) {
+                $details = $this->db->query("
+                    SELECT dp.*, pr.gambar
+                    FROM detail_pesanan dp
+                    LEFT JOIN produk pr ON pr.id = dp.produk_id
+                    WHERE dp.pesanan_id IN ($ids)
+                ")->fetchAll();
+
+                foreach ($details as $d) {
+                    $detailMap[$d->pesanan_id][] = $d;
+                }
+            }
+
+            // Fallback: untuk pesanan lama yang belum pakai detail_pesanan
+            foreach ($pesanans as $p) {
+                if (empty($detailMap[$p->id]) && $p->produk_id) {
+                    $fallback = $this->db->prepare(
+                        "SELECT pr.nama AS nama_produk, ps.jumlah, ps.total_harga AS subtotal
+                         FROM pesanan ps JOIN produk pr ON pr.id = ps.produk_id
+                         WHERE ps.id = ?"
+                    );
+                    $fallback->execute([$p->id]);
+                    $row = $fallback->fetchObject();
+                    if ($row) $detailMap[$p->id][] = $row;
+                }
+            }
+        }
+
+        renderPegawai('pegawai/antrian', compact('pesanans', 'detailMap', 'status'));
     }
 
     public function updateStatus(): void {
         $id     = (int)($_POST['id'] ?? 0);
-        $status = $_POST['status'] ?? '';
-        $allowed = ['pending','diproses','dikirim','selesai','batal'];
-        if (!in_array($status, $allowed)) { flash('error','Status tidak valid.'); redirect('/pegawai/antrian'); }
-        $this->db->prepare("UPDATE pesanan SET status=? WHERE id=?")->execute([$status, $id]);
-        flash('success','Status pesanan diperbarui!');
+        $status = trim($_POST['status'] ?? '');
+
+        $allowed = ['pending', 'menunggu_konfirmasi', 'diproses', 'selesai', 'batal'];
+
+        if (!$id || !in_array($status, $allowed)) {
+            flash('error', 'Status tidak valid.');
+            redirect('/pegawai/antrian');
+        }
+
+        // Cek status saat ini — pesanan selesai/batal tidak bisa diubah lagi
+        $stmt = $this->db->prepare("SELECT status FROM pesanan WHERE id = ?");
+        $stmt->execute([$id]);
+        $pesanan = $stmt->fetchObject();
+
+        if (!$pesanan) {
+            flash('error', 'Pesanan tidak ditemukan.');
+            redirect('/pegawai/antrian');
+        }
+
+        if (in_array($pesanan->status, ['selesai', 'batal'])) {
+            flash('error', "Pesanan berstatus '{$pesanan->status}' tidak dapat diubah lagi.");
+            redirect('/pegawai/antrian');
+        }
+
+        $this->db->prepare("UPDATE pesanan SET status = ? WHERE id = ?")->execute([$status, $id]);
+
+        // Jika diproses (kasir approve) → tandai pembayaran lunas
+        if ($status === 'diproses') {
+            $this->db->prepare(
+                "UPDATE pembayaran SET status = 'lunas'
+                 WHERE pesanan_id = ? AND status = 'menunggu_konfirmasi'"
+            )->execute([$id]);
+        }
+
+        flash('success', "Status pesanan diperbarui menjadi '$status'.");
         redirect('/pegawai/antrian');
     }
 

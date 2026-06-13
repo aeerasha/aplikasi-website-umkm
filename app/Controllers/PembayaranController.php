@@ -1,7 +1,14 @@
 <?php
 class PembayaranController {
-    private PDO $db;
-    public function __construct() { $this->db = Database::getInstance(); requireRole('admin'); }
+    protected PDO $db;
+    public function __construct(bool $adminOnly = true)
+    {
+        $this->db = Database::getInstance();
+
+        if ($adminOnly) {
+            requireRole('admin');
+        }
+    }
 
     public function index(): void {
         $search = $_GET['search'] ?? '';
@@ -83,5 +90,80 @@ class PembayaranController {
             header('Location: /pembayaran');
             exit;
         }
+    }
+
+    // ── QRIS Dummy (GET) — halaman pembayaran untuk customer tamu ────────────
+    // Route ini TIDAK memakai __construct requireRole sehingga dipanggil
+    // langsung dari closure di index.php dengan instance baru tanpa proteksi admin.
+    public function showQris(): void {
+        $pesananId = (int)($_GET['pesanan_id'] ?? 0);
+        if (!$pesananId) {
+            flash('error', 'ID pesanan tidak valid.');
+            redirect('/customer/katalog');
+        }
+
+        $stmt = $this->db->prepare(
+            "SELECT ps.*, pb.id as bayar_id, pb.status as status_bayar
+             FROM pesanan ps
+             LEFT JOIN pembayaran pb ON pb.pesanan_id = ps.id
+             WHERE ps.id = ?"
+        );
+        $stmt->execute([$pesananId]);
+        $pesanan = $stmt->fetchObject();
+
+        if (!$pesanan) {
+            flash('error', 'Pesanan tidak ditemukan.');
+            redirect('/customer/katalog');
+        }
+
+        if (in_array($pesanan->status_bayar ?? '', ['menunggu_konfirmasi', 'lunas'])) {
+            flash('error', 'Pembayaran untuk pesanan ini sudah dikirim sebelumnya.');
+            redirect('/customer/katalog');
+        }
+
+        // Render halaman QRIS (standalone, tanpa layout admin)
+        $db = $this->db;
+        include BASE_PATH . '/resources/views/customer/qris.php';
+    }
+
+    // ── Simulasi "Sudah Bayar" (POST) ─────────────────────────────────────────
+    public function konfirmasiSudahBayar(): void {
+        $pesananId = (int)($_POST['pesanan_id'] ?? 0);
+        if (!$pesananId) {
+            flash('error', 'ID pesanan tidak valid.');
+            redirect('/customer/katalog');
+        }
+
+        $stmt = $this->db->prepare("SELECT * FROM pesanan WHERE id = ?");
+        $stmt->execute([$pesananId]);
+        $pesanan = $stmt->fetchObject();
+
+        if (!$pesanan) {
+            flash('error', 'Pesanan tidak ditemukan.');
+            redirect('/customer/katalog');
+        }
+
+        // Cek apakah record pembayaran sudah ada
+        $cek = $this->db->prepare("SELECT id FROM pembayaran WHERE pesanan_id = ?");
+        $cek->execute([$pesananId]);
+        $bayarId = $cek->fetchColumn();
+
+        if ($bayarId) {
+            $this->db->prepare(
+                "UPDATE pembayaran SET metode = 'QRIS', status = 'menunggu_konfirmasi' WHERE id = ?"
+            )->execute([$bayarId]);
+        } else {
+            $this->db->prepare(
+                "INSERT INTO pembayaran (pesanan_id, metode, jumlah, status, created_at)
+                 VALUES (?, 'QRIS', ?, 'menunggu_konfirmasi', ?)"
+            )->execute([$pesananId, $pesanan->total_harga, date('Y-m-d H:i:s')]);
+        }
+
+        $this->db->prepare(
+            "UPDATE pesanan SET status = 'menunggu_konfirmasi' WHERE id = ?"
+        )->execute([$pesananId]);
+
+        flash('success', "Pembayaran QRIS pesanan {$pesanan->kode_pesanan} berhasil dikirim! Menunggu konfirmasi kasir.");
+        redirect('/customer/pesanan-saya');
     }
 }

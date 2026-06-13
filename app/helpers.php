@@ -99,3 +99,25 @@ function requireRole(string ...$roles): void {
         };
     }
 }
+
+// ── Guest Customer (tanpa login) ─────────────────────────────────────────────
+
+/**
+ * Ambil data sesi tamu customer (nama, no_hp, nomor_meja).
+ */
+function customerSession(): ?array {
+    return $_SESSION['customer'] ?? null;
+}
+
+/**
+ * Proteksi halaman customer: cukup cek $_SESSION['customer'],
+ * tidak perlu akun login. Jika belum ada, redirect ke form identitas.
+ */
+function requireCustomer(): void {
+    if (empty($_SESSION['customer']['nama'])
+        || empty($_SESSION['customer']['no_hp'])
+        || empty($_SESSION['customer']['nomor_meja'])) {
+        flash('error', 'Silakan isi identitas Anda terlebih dahulu.');
+        redirect('/customer/identitas');
+    }
+}
