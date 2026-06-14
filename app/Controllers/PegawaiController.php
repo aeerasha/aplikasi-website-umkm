@@ -5,13 +5,31 @@ class PegawaiController {
 
     public function index(): void {
         $search = $_GET['search'] ?? '';
+        $params = [];
+
+        // JOIN ke users agar kolom role dan status aktif/nonaktif akun ikut terbaca
+        $sql = "
+            SELECT
+                pg.*,
+                u.role   AS akun_role,
+                u.aktif  AS akun_aktif,
+                u.email  AS akun_email
+            FROM pegawai pg
+            LEFT JOIN users u ON u.id = pg.user_id
+            WHERE 1=1
+        ";
+
         if ($search) {
-            $stmt = $this->db->prepare("SELECT * FROM pegawai WHERE nama LIKE ? OR jabatan LIKE ? ORDER BY id DESC");
-            $stmt->execute(["%$search%", "%$search%"]);
-        } else {
-            $stmt = $this->db->query("SELECT * FROM pegawai ORDER BY id DESC");
+            $sql   .= " AND (pg.nama LIKE ? OR pg.jabatan LIKE ? OR pg.email LIKE ?)";
+            $params = ["%$search%", "%$search%", "%$search%"];
         }
+
+        $sql .= " ORDER BY pg.id DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
         $pegawais = $stmt->fetchAll();
+
         renderView('pegawai/index', compact('pegawais', 'search'));
     }
 
@@ -81,8 +99,39 @@ class PegawaiController {
 
     public function destroy(): void {
         $id = (int)($_POST['id'] ?? 0);
-        $this->db->prepare("DELETE FROM pegawai WHERE id=?")->execute([$id]);
-        flash('success', 'Pegawai berhasil dihapus!');
+        if (!$id) {
+            flash('error', 'ID tidak valid.');
+            redirect('/pegawai');
+        }
+
+        // Ambil user_id yang tertaut sebelum dihapus
+        $stmt = $this->db->prepare("SELECT user_id FROM pegawai WHERE id = ?");
+        $stmt->execute([$id]);
+        $pegawai = $stmt->fetchObject();
+
+        if (!$pegawai) {
+            flash('error', 'Data pegawai tidak ditemukan.');
+            redirect('/pegawai');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->prepare("DELETE FROM pegawai WHERE id = ?")->execute([$id]);
+
+            // Hapus akun users yang tertaut, hanya jika role-nya 'pegawai' (jangan sampai hapus admin)
+            if ($pegawai->user_id) {
+                $this->db->prepare(
+                    "DELETE FROM users WHERE id = ? AND role = 'pegawai'"
+                )->execute([$pegawai->user_id]);
+            }
+
+            $this->db->commit();
+            flash('success', 'Pegawai dan akun terkait berhasil dihapus.');
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            flash('error', 'Gagal menghapus data pegawai. Coba lagi.');
+        }
+
         redirect('/pegawai');
     }
 }

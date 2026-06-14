@@ -1,4 +1,9 @@
-<?php $pageTitle = 'Buat Pesanan'; ?>
+<?php
+$pageTitle = 'Buat Pesanan';
+
+$produks   = $produks ?? [];
+$produk_id = $produk_id ?? 0;
+?>
 <div class="mb-4">
     <a href="/customer/katalog" class="btn btn-sm btn-outline-secondary mb-2"><i class="bi bi-arrow-left me-1"></i>Kembali ke Katalog</a>
     <h4 class="fw-800 mb-0" style="color:#1a1f36"><i class="bi bi-cart-plus me-2" style="color:#10b981"></i>Buat Pesanan Baru</h4>
@@ -9,7 +14,7 @@
         <form method="POST" action="/customer/buat-pesanan">
             <div class="mb-3">
                 <label class="form-label fw-semibold">Nomor Telepon</label>
-                <input type="text" name="telepon" class="form-control" placeholder="08xx" value="<?= e(auth()['telepon'] ?? '') ?>">
+                <input type="text" name="telepon" class="form-control" placeholder="08xx" value="<?= e($_SESSION['customer']['no_hp'] ?? '') ?>">
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Pilih Produk <span class="text-danger">*</span></label>

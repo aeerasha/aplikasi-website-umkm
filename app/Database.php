@@ -38,6 +38,28 @@ class Database {
         $db->exec("CREATE TABLE IF NOT EXISTS inventaris (id INTEGER PRIMARY KEY AUTOINCREMENT, nama_alat VARCHAR(100) NOT NULL, kategori VARCHAR(50), jumlah INTEGER DEFAULT 0, kondisi VARCHAR(30) DEFAULT 'Baik', created_at DATETIME DEFAULT (datetime('now', '+7 hours')))");
         $db->exec("CREATE TABLE IF NOT EXISTS supplier (id INTEGER PRIMARY KEY AUTOINCREMENT, nama_supplier VARCHAR(100) NOT NULL, nama_kontak VARCHAR(100), telepon VARCHAR(20), alamat TEXT, keterangan TEXT, created_at DATETIME DEFAULT (datetime('now', '+7 hours')))");
 
+        // ── Tabel detail item pesanan (one-to-many) ───────────────────────────
+        $db->exec("CREATE TABLE IF NOT EXISTS detail_pesanan (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            pesanan_id    INTEGER NOT NULL,
+            produk_id     INTEGER NOT NULL,
+            nama_produk   VARCHAR(100) NOT NULL,
+            harga_satuan  DECIMAL(10,2) NOT NULL,
+            jumlah        INTEGER NOT NULL DEFAULT 1,
+            subtotal      DECIMAL(10,2) NOT NULL,
+            FOREIGN KEY (pesanan_id) REFERENCES pesanan(id) ON DELETE CASCADE,
+            FOREIGN KEY (produk_id)  REFERENCES produk(id)
+        )");
+
+        // ── Tambah kolom nomor_meja ke pesanan jika belum ada ─────────────────
+        $pesananCols = array_column(
+            $db->query("PRAGMA table_info(pesanan)")->fetchAll(PDO::FETCH_ASSOC),
+            'name'
+        );
+        if (!in_array('nomor_meja', $pesananCols)) {
+            $db->exec("ALTER TABLE pesanan ADD COLUMN nomor_meja VARCHAR(10) DEFAULT NULL");
+        }
+
         // Cek apakah database kosong
         $count = $db->query("SELECT COUNT(*) FROM users")->fetchColumn();
         if ($count == 0) {

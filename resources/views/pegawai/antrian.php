@@ -6,43 +6,82 @@
     <div class="card-body pb-0">
         <form method="GET" action="/pegawai/antrian" class="row g-2 mb-3">
             <div class="col-auto">
-                <?php foreach ([''=>'Semua','pending'=>'Pending','diproses'=>'Diproses','dikirim'=>'Dikirim','selesai'=>'Selesai'] as $v => $l): ?>
-                <a href="/pegawai/antrian<?= $v ? "?status=$v" : '' ?>" class="btn btn-sm <?= $status===$v ? 'btn-warning text-white' : 'btn-outline-secondary' ?> me-1"><?= $l ?></a>
+                <?php foreach ([''=>'Semua','pending'=>'Pending','menunggu_konfirmasi'=>'Menunggu Konfirmasi','diproses'=>'Diproses','selesai'=>'Selesai','batal'=>'Batal'] as $v => $l): ?>
+                <a href="/pegawai/antrian<?= $v ? "?status=$v" : '' ?>"
+                   class="btn btn-sm <?= $status===$v ? 'btn-warning text-white' : 'btn-outline-secondary' ?> me-1 mb-1"><?= $l ?></a>
                 <?php endforeach; ?>
             </div>
         </form>
     </div>
     <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead><tr><th class="ps-3">Kode</th><th>Pelanggan</th><th>Produk</th><th>Jml</th><th>Total</th><th>Catatan</th><th>Status</th><th>Ubah Status</th></tr></thead>
+        <table class="table table-hover align-top mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-3">Kode & Waktu</th>
+                    <th>Pelanggan</th>
+                    <th>Item Pesanan</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Ubah Status</th>
+                </tr>
+            </thead>
             <tbody>
             <?php foreach ($pesanans as $p):
-                $next = ['pending'=>'diproses','diproses'=>'dikirim','dikirim'=>'selesai'];
-                $nextStatus = $next[$p->status] ?? null;
+                $items = $detailMap[$p->id] ?? [];
             ?>
             <tr>
-                <td class="ps-3"><strong><?= e($p->kode_pesanan) ?></strong></td>
-                <td><?= e($p->nama_pelanggan) ?><br><small class="text-muted"><?= e($p->telepon??'') ?></small></td>
-                <td><?= e($p->nama_produk??'-') ?></td>
-                <td><?= $p->jumlah ?></td>
-                <td><?= formatRupiah($p->total_harga) ?></td>
-                <td class="text-muted" style="max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= e($p->catatan??'-') ?></td>
-                <td><?= statusBadge($p->status) ?></td>
+                <td class="ps-3">
+                    <strong><?= e($p->kode_pesanan) ?></strong><br>
+                    <small class="text-muted"><?= date('d M H:i', strtotime($p->created_at)) ?></small>
+                </td>
+                <td>
+                    <?= e($p->nama_pelanggan) ?><br>
+                    <small class="text-muted"><?= e($p->telepon ?? '') ?></small>
+                    <?php if (!empty($p->nomor_meja)): ?>
+                        <br><span class="badge bg-info text-dark">Meja <?= e($p->nomor_meja) ?></span>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <?php if (empty($items)): ?>
+                        <span class="text-muted">—</span>
+                    <?php else: ?>
+                        <?php foreach ($items as $item): ?>
+                            <div class="d-flex justify-content-between gap-3">
+                                <span><?= e($item->nama_produk) ?> <span class="text-muted">×<?= $item->jumlah ?></span></span>
+                                <span class="text-success fw-semibold text-nowrap"><?= formatRupiah($item->subtotal) ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </td>
+                <td class="fw-bold text-success"><?= formatRupiah($p->total_harga) ?></td>
+                <td>
+                    <?= statusBadge($p->status) ?>
+                    <?php if (!empty($p->status_bayar)): ?>
+                        <br><small><?= statusBadge($p->status_bayar) ?></small>
+                    <?php endif; ?>
+                </td>
                 <td>
                     <form method="POST" action="/pegawai/update-status" class="d-flex gap-1">
                         <input type="hidden" name="id" value="<?= $p->id ?>">
-                        <select name="status" class="form-select form-select-sm" style="width:110px">
-                            <?php foreach (['pending','diproses','dikirim','selesai','batal'] as $s): ?>
-                            <option value="<?= $s ?>" <?= $p->status===$s?'selected':'' ?>><?= ucfirst($s) ?></option>
+                        <select name="status" class="form-select form-select-sm" style="width:130px"
+                            <?= in_array($p->status, ['selesai','batal']) ? 'disabled' : '' ?>>
+                            <?php foreach (['pending','menunggu_konfirmasi','diproses','selesai','batal'] as $s): ?>
+                            <option value="<?= $s ?>" <?= $p->status===$s?'selected':'' ?>>
+                                <?= ucfirst(str_replace('_',' ',$s)) ?>
+                            </option>
                             <?php endforeach; ?>
                         </select>
-                        <button type="submit" class="btn btn-sm btn-warning text-white">✓</button>
+                        <?php if (!in_array($p->status, ['selesai','batal'])): ?>
+                            <button type="submit" class="btn btn-sm btn-warning text-white fw-bold">✓</button>
+                        <?php else: ?>
+                            <button disabled class="btn btn-sm btn-secondary">✓</button>
+                        <?php endif; ?>
                     </form>
                 </td>
             </tr>
             <?php endforeach; ?>
             <?php if (empty($pesanans)): ?>
-            <tr><td colspan="8" class="text-center py-4 text-muted">Tidak ada pesanan</td></tr>
+            <tr><td colspan="6" class="text-center py-5 text-muted">Tidak ada pesanan</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

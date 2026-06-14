@@ -97,34 +97,78 @@ class RekapController {
         return $stmt->fetchAll();
     }
 
-    // ── Ringkasan periode ─────────────────────────────────────────────────────
-    private function getRingkasanPeriode(string $periode, string $tgl, string $minggu, string $bulan): object {
-        switch ($periode) {
-            case 'mingguan':
-                $where  = "strftime('%Y-%W', ps.created_at) = '$minggu'";
-                break;
-            case 'bulanan':
-                $where  = "strftime('%Y-%m', ps.created_at) = '$bulan'";
-                break;
-            default:
-                $where  = "DATE(ps.created_at) = '$tgl'";
-        }
+    // ── Ringkasan periode — prepared statement, tidak ada string interpolasi ──
+    private function getRingkasanPeriode(
+        string $periode,
+        string $tgl,
+        string $minggu,
+        string $bulan
+    ): object {
+        [$filterExpr, $param] = match($periode) {
+            'mingguan' => ["strftime('%Y-%W', ps.created_at) = ?", $minggu],
+            'bulanan'  => ["strftime('%Y-%m', ps.created_at) = ?",  $bulan],
+            default    => ["DATE(ps.created_at) = ?",               $tgl],
+        };
 
-        return $this->db->query("
+        $stmt = $this->db->prepare("
             SELECT
-                COUNT(ps.id)         AS total_transaksi,
-                COALESCE(SUM(ps.total_harga), 0)  AS total_penjualan,
-                COALESCE(SUM(CASE WHEN pb.status='lunas' THEN pb.jumlah ELSE 0 END), 0) AS total_diterima,
-                COUNT(CASE WHEN ps.status='selesai' THEN 1 END) AS pesanan_selesai,
-                COUNT(CASE WHEN ps.status='batal'   THEN 1 END) AS pesanan_batal,
-                COUNT(CASE WHEN ps.status='pending' THEN 1 END) AS pesanan_pending,
-                COALESCE(AVG(ps.total_harga), 0)  AS rata_rata,
-                (SELECT p.nama FROM pesanan ps2 JOIN produk p ON p.id=ps2.produk_id
-                 WHERE $where GROUP BY ps2.produk_id ORDER BY COUNT(*) DESC LIMIT 1) AS produk_terlaris
+                COUNT(ps.id)                                                      AS total_transaksi,
+                COALESCE(SUM(ps.total_harga), 0)                                 AS total_penjualan,
+                COALESCE(SUM(CASE WHEN pb.status = 'lunas'
+                                  THEN pb.jumlah ELSE 0 END), 0)                 AS total_diterima,
+                COUNT(CASE WHEN ps.status = 'selesai'             THEN 1 END)    AS pesanan_selesai,
+                COUNT(CASE WHEN ps.status = 'batal'               THEN 1 END)    AS pesanan_batal,
+                COUNT(CASE WHEN ps.status = 'pending'             THEN 1 END)    AS pesanan_pending,
+                COUNT(CASE WHEN ps.status = 'menunggu_konfirmasi' THEN 1 END)    AS pesanan_menunggu,
+                COALESCE(AVG(ps.total_harga), 0)                                 AS rata_rata
             FROM pesanan ps
             LEFT JOIN pembayaran pb ON pb.pesanan_id = ps.id
-            WHERE $where
-        ")->fetchObject();
+            WHERE $filterExpr
+        ");
+        $stmt->execute([$param]);
+        $ringkasan = $stmt->fetchObject();
+
+        // Produk terlaris: coba dari detail_pesanan dulu, fallback ke produk_id lama
+        $ringkasan->produk_terlaris = $this->getProdukTerlarisLabel($filterExpr, $param);
+
+        return $ringkasan;
+    }
+
+    // ── Produk terlaris — SUM dari detail_pesanan, fallback ke COUNT pesanan ──
+    private function getProdukTerlarisLabel(string $filterExpr, string $param): string {
+        // Cek apakah tabel detail_pesanan sudah ada
+        $tableExists = $this->db->query(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='detail_pesanan'"
+        )->fetchColumn();
+
+        if ($tableExists) {
+            $stmt = $this->db->prepare("
+                SELECT pr.nama
+                FROM detail_pesanan dp
+                JOIN produk  pr ON pr.id = dp.produk_id
+                JOIN pesanan ps ON ps.id = dp.pesanan_id
+                WHERE $filterExpr
+                GROUP BY dp.produk_id
+                ORDER BY SUM(dp.jumlah) DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$param]);
+            $nama = $stmt->fetchColumn();
+            if ($nama) return $nama;
+        }
+
+        // Fallback: hitung dari kolom produk_id di tabel pesanan (data lama)
+        $stmt = $this->db->prepare("
+            SELECT pr.nama
+            FROM pesanan ps
+            JOIN produk pr ON pr.id = ps.produk_id
+            WHERE $filterExpr AND ps.produk_id IS NOT NULL
+            GROUP BY ps.produk_id
+            ORDER BY COUNT(*) DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$param]);
+        return $stmt->fetchColumn() ?: '-';
     }
 
     // ── Grafik 12 bulan terakhir ──────────────────────────────────────────────

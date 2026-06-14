@@ -1,4 +1,10 @@
-<?php $pageTitle = 'Katalog Produk'; ?>
+<?php
+$pageTitle = 'Katalog Produk';
+
+$search   = $search ?? '';
+$kategori = $kategori ?? '';
+$produks  = $produks ?? [];
+?>
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 class="fw-800 mb-0" style="color:#1a1f36"><i class="bi bi-grid me-2" style="color:#10b981"></i>Katalog Produk</h4>

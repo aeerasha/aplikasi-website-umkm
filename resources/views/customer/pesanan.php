@@ -36,8 +36,7 @@
                 <?= statusBadge($p->status) ?>
             </div>
 
-            <div class="mb-1" style="font-size:.87rem"><i class="bi bi-box-seam me-2 text-muted"></i><?= e($p->nama_produk ?? '-') ?></div>
-            <div class="mb-1" style="font-size:.87rem"><i class="bi bi-hash me-2 text-muted"></i>Jumlah: <?= $p->jumlah ?> pcs</div>
+            <div class="mb-1" style="font-size:.87rem"><i class="bi bi-box-seam me-2 text-muted"></i><?= e($p->daftar_produk ?? '-') ?></div>
             <?php if ($p->catatan && $p->catatan !== '-'): ?>
             <div class="mb-1 text-muted" style="font-size:.82rem"><i class="bi bi-chat me-2"></i><?= e($p->catatan) ?></div>
             <?php endif; ?>
