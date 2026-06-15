@@ -45,7 +45,7 @@
         <a href="/customer/ulasan" class="nav-link-top <?= str_starts_with($curUri, '/customer/ulasan') ? 'active' : '' ?>">
             <i class="bi bi-star"></i><span class="d-none d-md-inline">Ulasan</span>
         </a>
-    </div>
+    </div> 
 </nav>
 <div class="content-area">
     <?php if ($f=getFlash('success')): ?>
