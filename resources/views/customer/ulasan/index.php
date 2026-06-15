@@ -1,14 +1,29 @@
 
+
 <div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h4 class="fw-bold text-dark mb-1">Ulasan & Rating Produk</h4>
-            <p class="text-muted small mb-0">Apa kata mereka tentang produk-produk UMKM App</p>
-        </div>
-        <a href="/customer/ulasan/create" class="btn btn-success px-3 fw-semibold">
+   <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold text-dark mb-1">Ulasan & Rating Produk</h4>
+        <p class="text-muted small mb-0">Apa kata mereka tentang produk-produk UMKM App</p>
+    </div>
+
+        <div class="d-flex gap-2">
+        <?php 
+        // Menggunakan $_GET dan memastikan kita menangkap ID yang valid
+        $pesanan_id = $_GET['pesanan_id'] ?? null; 
+        ?>
+        
+        <?php if ($pesanan_id !== null): ?>
+            <a href="/customer/pesanan-status?id=<?= (int)$pesanan_id ?>" class="btn btn-outline-secondary px-3 fw-semibold">
+                <i class="bi bi-arrow-left me-1"></i> Kembali
+            </a>
+        <?php endif; ?>
+
+        <a href="/customer/ulasan/create?pesanan_id=<?= (int)$pesanan_id ?>" class="btn btn-success px-3 fw-semibold">
             <i class="bi bi-pencil-square me-1"></i> Tulis Ulasan
         </a>
     </div>
+</div>
 
     <div class="row">
         <?php if (empty($ulasan)): ?>

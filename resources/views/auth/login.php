@@ -25,7 +25,7 @@
 <div class="login-card">
     <div class="login-header">
         <div style="font-size:2.5rem;margin-bottom:8px">🛒</div>
-        <h4>UMKM App</h4>
+        <h4>UMKM MAJU</h4>
         <small>Pengembangan Aplikasi untuk UMKM</small>
     </div>
     <div class="login-body">
@@ -57,14 +57,12 @@
         </form>
 
         <div class="text-center mb-3" style="font-size:.85rem">
-            Belum punya akun? <a href="/register" style="color:#6366f1;font-weight:600">Daftar sebagai Pelanggan</a>
         </div>
 
         <div class="role-hint">
             <div class="fw-bold mb-2 text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">Akun Demo</div>
             <div class="role-row"><span><i class="bi bi-shield-check text-danger me-1"></i><strong>Admin</strong></span><span class="text-muted">admin@umkm.com / admin123</span></div>
             <div class="role-row"><span><i class="bi bi-person-badge text-warning me-1"></i><strong>Pegawai</strong></span><span class="text-muted">budi@umkm.com / pegawai123</span></div>
-            <div class="role-row"><span><i class="bi bi-person text-success me-1"></i><strong>Pelanggan</strong></span><span class="text-muted">andi@gmail.com / pelanggan123</span></div>
         </div>
     </div>
 </div>

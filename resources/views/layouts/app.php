@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($pageTitle ?? 'Admin') ?> — UMKM App</title>
+    <title><?= e($pageTitle ?? 'Admin') ?> — UMKM MAJU</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
@@ -45,7 +45,7 @@
 <?php $curUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH); $u = auth(); ?>
 <nav id="sidebar">
     <div class="brand">
-        <h5><i class="bi bi-shop me-2"></i>UMKM App</h5>
+        <h5><i class="bi bi-shop me-2"></i>UMKM MAJU</h5>
         <small>
             <?php if ($u): ?>
                 <span class="role-badge-<?= $u['role'] ?>"><?= strtoupper($u['role']) ?></span>

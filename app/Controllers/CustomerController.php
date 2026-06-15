@@ -126,139 +126,85 @@ class CustomerController {
             renderCustomer('customer/buat_pesanan', compact('produks','produk_id'));
         }
 
-        public function storePesanan(): void
-        {
-            $customer = $_SESSION['customer'];
+    public function storePesanan(): void
+{
+    // Pastikan session aktif
+    $customer = $_SESSION['customer'] ?? null;
+    $keranjang = $_SESSION['keranjang'] ?? [];
 
-            $produkId = (int)($_POST['produk_id'] ?? 0);
-            $jumlah   = (int)($_POST['jumlah'] ?? 1);
-            $catatan  = trim($_POST['catatan'] ?? '');
+    if (empty($keranjang) || !$customer) {
+        flash('error', 'Keranjang atau data pelanggan tidak lengkap!');
+        redirect('/customer/keranjang');
+        return;
+    }
 
-            if ($produkId <= 0) {
-                flash('error', 'Produk belum dipilih.');
-                redirect('/customer/buat-pesanan');
-            }
+    try {
+        // Aktifkan mode exception agar error database langsung terlihat
+        $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $this->db->beginTransaction();
 
-            try {
-                // 1. START TRANSACTION (HARUS di awal)
-                $this->db->beginTransaction();
-
-                // 2. LOCK PRODUK (anti race condition)
-                $stmt = $this->db->prepare(
-                    "SELECT * FROM produk WHERE id = ? FOR UPDATE"
-                );
-                $stmt->execute([$produkId]);
-                $produk = $stmt->fetchObject();
-
-                if (!$produk) {
-                    throw new Exception('Produk tidak ditemukan.');
-                }
-
-                if ($jumlah <= 0) {
-                    throw new Exception('Jumlah tidak valid.');
-                }
-
-                if ($produk->stok < $jumlah) {
-                    throw new Exception("Stok {$produk->nama} tidak mencukupi. Sisa stok: {$produk->stok}");
-                }
-
-                // 3. HITUNG TOTAL
-                $totalHarga = $produk->harga * $jumlah;
-
-                // 4. INSERT PESANAN (tanpa kode dulu)
-                $stmt = $this->db->prepare(
-                    "INSERT INTO pesanan
-                    (
-                        nama_pelanggan,
-                        telepon,
-                        nomor_meja,
-                        customer_guest_id,
-                        produk_id,
-                        jumlah,
-                        total_harga,
-                        status,
-                        catatan,
-                        created_at
-                    )
-                    VALUES
-                    (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)"
-                );
-
-                $stmt->execute([
-                    $customer['nama'],
-                    $customer['no_hp'],
-                    $customer['nomor_meja'],
-                    $customer['id'],
-                    $produk->id,
-                    $jumlah,
-                    $totalHarga,
-                    $catatan,
-                    date('Y-m-d H:i:s')
-                ]);
-
-                // 5. AMBIL ID PESANAN
-                $pesananId = $this->db->lastInsertId();
-
-                // 6. GENERATE KODE PESANAN
-                $kode = 'ORD-' . str_pad($pesananId, 4, '0', STR_PAD_LEFT);
-
-                // 7. UPDATE KODE PESANAN
-                $this->db->prepare(
-                    "UPDATE pesanan
-                    SET kode_pesanan = ?
-                    WHERE id = ?"
-                )->execute([
-                    $kode,
-                    $pesananId
-                ]);
-
-                // 8. INSERT DETAIL PESANAN
-                $stmtDetail = $this->db->prepare(
-                    "INSERT INTO detail_pesanan
-                    (
-                        pesanan_id,
-                        produk_id,
-                        nama_produk,
-                        harga_satuan,
-                        jumlah,
-                        subtotal
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)"
-                );
-
-                $stmtDetail->execute([
-                    $pesananId,
-                    $produk->id,
-                    $produk->nama,
-                    $produk->harga,
-                    $jumlah,
-                    $totalHarga
-                ]);
-
-                // 9. KURANGI STOK
-                $this->db->prepare(
-                    "UPDATE produk
-                    SET stok = stok - ?
-                    WHERE id = ?"
-                )->execute([
-                    $jumlah,
-                    $produk->id
-                ]);
-
-                // 10. COMMIT TRANSACTION
-                $this->db->commit();
-
-                flash('success', "Pesanan {$kode} berhasil dibuat.");
-                redirect("/customer/qris?pesanan_id={$pesananId}");
-
-            } catch (Exception $e) {
-
-                $this->db->rollBack();
-
-                flash('error', 'Gagal menyimpan pesanan: ' . $e->getMessage());
-                redirect('/customer/buat-pesanan');
+        // 1. Hitung total harga
+        $totalHarga = 0;
+        foreach ($keranjang as $produk_id => $data) {
+            $jumlah = is_array($data) ? $data['jumlah'] : $data;
+            $stmt = $this->db->prepare("SELECT harga FROM produk WHERE id = ?");
+            $stmt->execute([$produk_id]);
+            $p = $stmt->fetchObject();
+            if ($p) {
+                $totalHarga += ($p->harga * $jumlah);
+            } else {
+                throw new Exception("Produk dengan ID $produk_id tidak ditemukan.");
             }
         }
+
+        // 2. Insert ke table 'pesanan'
+        $sqlPesanan = "INSERT INTO pesanan (nama_pelanggan, telepon, nomor_meja, total_harga, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)";
+        $stmt = $this->db->prepare($sqlPesanan);
+        $stmt->execute([
+            $customer['nama'], 
+            $customer['no_hp'], 
+            $customer['nomor_meja'], 
+            $totalHarga, 
+            date('Y-m-d H:i:s')
+        ]);
+        
+        $pesananId = $this->db->lastInsertId();
+        $kode = 'ORD-' . str_pad($pesananId, 4, '0', STR_PAD_LEFT);
+        
+        $this->db->prepare("UPDATE pesanan SET kode_pesanan = ? WHERE id = ?")->execute([$kode, $pesananId]);
+
+        // 3. Insert ke 'detail_pesanan'
+        $sqlDetail = "INSERT INTO detail_pesanan (pesanan_id, produk_id, nama_produk, harga_satuan, jumlah, subtotal, catatan) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        $stmtDetail = $this->db->prepare($sqlDetail);
+        
+        foreach ($keranjang as $produk_id => $data) {
+            $jumlah = is_array($data) ? $data['jumlah'] : $data;
+            $catatan = is_array($data) ? ($data['catatan'] ?? '') : '';
+
+            $p = $this->db->prepare("SELECT nama, harga FROM produk WHERE id = ?");
+            $p->execute([$produk_id]);
+            $prod = $p->fetchObject();
+            
+            if ($prod) {
+                $subtotal = $prod->harga * $jumlah;
+                $stmtDetail->execute([$pesananId, $produk_id, $prod->nama, $prod->harga, $jumlah, $subtotal, $catatan]);
+                
+                // Kurangi stok
+                $this->db->prepare("UPDATE produk SET stok = stok - ? WHERE id = ?")->execute([$jumlah, $produk_id]);
+            }
+        }
+
+        $this->db->commit();
+        unset($_SESSION['keranjang']); 
+        flash('success', "Pesanan {$kode} berhasil dibuat!");
+        redirect("/customer/pesanan-saya");
+
+    } catch (Exception $e) {
+        $this->db->rollBack();
+        // Jika gagal, ini akan menampilkan pesan error yang spesifik
+        die("Error Database saat checkout: " . $e->getMessage()); 
+    }
+}
 
     // ── Halaman Pembayaran ────────────────────────────────────────────────────
     public function bayar(): void {
@@ -476,55 +422,58 @@ class CustomerController {
     // ── Keranjang Belanja ─────────────────────────────────────────────────────
 
     public function keranjang(): void {
-        $items    = $_SESSION['keranjang'] ?? [];
-        $produkData = [];
-        $total    = 0;
+    $items = $_SESSION['keranjang'] ?? [];
+    $produkData = [];
+    $total = 0;
 
-        foreach ($items as $produk_id => $jumlah) {
-            $stmt = $this->db->prepare("SELECT id, nama, harga, gambar FROM produk WHERE id = ?");
-            $stmt->execute([(int)$produk_id]);
-            $p = $stmt->fetchObject();
-            if ($p) {
-                $p->jumlah   = $jumlah;
-                $p->subtotal = $p->harga * $jumlah;
-                $total      += $p->subtotal;
-                $produkData[] = $p;
-            }
+    foreach ($items as $produk_id => $data) {
+        // Ambil jumlah dan catatan dengan aman
+        $jumlah = is_array($data) ? $data['jumlah'] : $data;
+        $catatan = is_array($data) ? ($data['catatan'] ?? '') : '';
+
+        $stmt = $this->db->prepare("SELECT id, nama, harga, gambar FROM produk WHERE id = ?");
+        $stmt->execute([(int)$produk_id]);
+        $p = $stmt->fetchObject();
+        
+        if ($p) {
+            $p->jumlah = $jumlah;
+            $p->catatan = $catatan; // Untuk ditampilkan di view
+            $p->subtotal = $p->harga * $jumlah;
+            $total += $p->subtotal;
+            $produkData[] = $p;
         }
-
-        renderCustomer('customer/keranjang', compact('produkData', 'total'));
     }
+    renderCustomer('customer/keranjang', compact('produkData', 'total'));
+}
 
     public function tambahKeranjang(): void {
         $produk_id = (int)($_POST['produk_id'] ?? 0);
-        $jumlah    = max(1, (int)($_POST['jumlah'] ?? 1));
+        $jumlah = (int)($_POST['jumlah'] ?? 1); 
 
-        if (!$produk_id) {
-            flash('error', 'Produk tidak valid.');
-            redirect('/customer/katalog');
+        $p = $this->db->prepare("SELECT id, stok FROM produk WHERE id = ?");
+        $p->execute([$produk_id]);
+        $produk = $p->fetchObject();
+
+        if ($produk) {
+            $keranjang = $_SESSION['keranjang'] ?? [];
+            
+            // Ambil catatan lama dengan aman
+            $catatanLama = (isset($keranjang[$produk_id]) && is_array($keranjang[$produk_id])) 
+                           ? $keranjang[$produk_id]['catatan'] : '';
+
+            if ($jumlah <= 0) {
+                unset($keranjang[$produk_id]);
+            } elseif ($jumlah <= $produk->stok) {
+                $keranjang[$produk_id] = [
+                    'jumlah' => $jumlah,
+                    'catatan' => $catatanLama
+                ];
+            } else {
+                flash('error', 'Stok tidak mencukupi!');
+            }
+            $_SESSION['keranjang'] = $keranjang;
         }
-
-        // Validasi produk ada
-        $stmt = $this->db->prepare("SELECT id, stok FROM produk WHERE id = ?");
-        $stmt->execute([$produk_id]);
-        $produk = $stmt->fetchObject();
-
-        if (!$produk) {
-            flash('error', 'Produk tidak ditemukan.');
-            redirect('/customer/katalog');
-        }
-
-        $existing = $_SESSION['keranjang'][$produk_id] ?? 0;
-        $newQty   = $existing + $jumlah;
-
-        if ($newQty > $produk->stok) {
-            flash('error', 'Jumlah melebihi stok yang tersedia.');
-            redirect('/customer/katalog');
-        }
-
-        $_SESSION['keranjang'][$produk_id] = $newQty;
-        flash('success', 'Produk ditambahkan ke keranjang!');
-        redirect('/customer/keranjang');
+        redirect($_SERVER['HTTP_REFERER']);
     }
 
     public function hapusKeranjang(): void {
@@ -537,7 +486,41 @@ class CustomerController {
     public function kosongkanKeranjang(): void {
         unset($_SESSION['keranjang']);
         flash('success', 'Keranjang dikosongkan.');
+        error_log("Isi Keranjang saat ini: " . print_r($_SESSION['keranjang'], true));
         redirect('/customer/keranjang');
     }
+
+    public function updateCatatan(): void {
+        $produk_id = (int)$_POST['produk_id'];
+        $_SESSION['keranjang'][$produk_id]['catatan'] = $_POST['catatan'] ?? '';
+    }
+
+    public function checkout(): void {
+    $items = $_SESSION['keranjang'] ?? [];
+    if (empty($items)) {
+        flash('error', 'Keranjang kosong!');
+        redirect('/customer/keranjang');
+    }
+
+    $produkData = [];
+    $total = 0;
+    foreach ($items as $produk_id => $data) {
+        $jumlah = is_array($data) ? $data['jumlah'] : $data;
+        $catatan = is_array($data) ? ($data['catatan'] ?? '') : '';
+        
+        $p = $this->db->prepare("SELECT id, nama, harga FROM produk WHERE id = ?");
+        $p->execute([$produk_id]);
+        $prod = $p->fetchObject();
+        
+        if ($prod) {
+            $prod->jumlah = $jumlah;
+            $prod->catatan = $catatan;
+            $prod->subtotal = $prod->harga * $jumlah;
+            $total += $prod->subtotal;
+            $produkData[] = $prod;
+        }
+    }
+    renderCustomer('customer/checkout', compact('produkData', 'total'));
+}
 }
 

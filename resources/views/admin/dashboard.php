@@ -1,4 +1,18 @@
 <?php $pageTitle = 'Dashboard Admin'; ?>
+<style>
+    .stat-card {
+        padding: 1.25rem;
+        border-radius: 12px;
+        color: white;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .stat-card .num { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; }
+    .stat-card .lbl { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; }
+</style>
+
 <div class="page-header mb-4">
     <h4><i class="bi bi-speedometer2 me-2" style="color:var(--accent)"></i>Dashboard Admin</h4>
     <small class="text-muted">Selamat datang, <strong><?= e(auth()['nama']) ?></strong> 👋</small>
@@ -20,33 +34,28 @@
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
         <div class="stat-card" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
-            <div class="d-flex justify-content-between align-items-start">
+            <div class="d-flex justify-content-between align-items-center">
                 <div><div class="num"><?= $totalProduk ?></div><div class="lbl">Produk</div></div>
-                <i class="bi bi-box-seam" style="font-size:1.8rem;opacity:.7"></i>
+                <i class="bi bi-box-seam fs-3 opacity-50"></i>
             </div>
         </div>
     </div>
     <div class="col-6 col-md-3">
         <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
-            <div class="d-flex justify-content-between align-items-start">
+            <div class="d-flex justify-content-between align-items-center">
                 <div><div class="num"><?= $totalPegawai ?></div><div class="lbl">Pegawai</div></div>
-                <i class="bi bi-people" style="font-size:1.8rem;opacity:.7"></i>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="stat-card" style="background:linear-gradient(135deg,#10b981,#059669)">
-            <div class="d-flex justify-content-between align-items-start">
-                <div><div class="num"><?= $totalPelanggan ?></div><div class="lbl">Pelanggan</div></div>
-                <i class="bi bi-person-check" style="font-size:1.8rem;opacity:.7"></i>
+                <i class="bi bi-people fs-3 opacity-50"></i>
             </div>
         </div>
     </div>
     <div class="col-6 col-md-3">
         <div class="stat-card" style="background:linear-gradient(135deg,#ef4444,#dc2626)">
-            <div class="d-flex justify-content-between align-items-start">
-                <div><div class="num" style="font-size:1rem;margin-top:6px"><?= formatRupiah($totalPemasukan) ?></div><div class="lbl">Total Pemasukan</div></div>
-                <i class="bi bi-cash-stack" style="font-size:1.8rem;opacity:.7"></i>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="num" style="font-size: 1.1rem;"><?= formatRupiah($totalPemasukan) ?></div>
+                    <div class="lbl">Total Pemasukan</div>
+                </div>
+                <i class="bi bi-cash-stack fs-3 opacity-50"></i>
             </div>
         </div>
     </div>

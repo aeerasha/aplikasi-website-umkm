@@ -36,13 +36,15 @@
             </div>
             <div class="table-responsive">
                 <table class="table mb-0">
-                    <thead><tr><th class="ps-3">Kode</th><th>Pelanggan</th><th>Produk</th><th>Status</th><th>Aksi Cepat</th></tr></thead>
+                    <thead><tr><th class="ps-3">Kode</th><th>Pelanggan</th><th>Produk</th><th>Status</th></tr></thead>
                     <tbody>
                     <?php foreach ($pesananAntrian as $p): ?>
                     <tr>
                         <td class="ps-3"><strong><?= e($p->kode_pesanan) ?></strong></td>
                         <td><?= e($p->nama_pelanggan) ?></td>
-                        <td><?= e($p->nama_produk ?? '-') ?></td>
+                        <td style="white-space:pre-line">
+                            <?= e($p->daftar_produk ?? '-') ?>
+                        </td>
                         <td><?= statusBadge($p->status) ?></td>
                         <td>
                             <?php

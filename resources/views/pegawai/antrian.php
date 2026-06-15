@@ -1,88 +1,75 @@
 <?php $pageTitle = 'Antrian Pesanan'; ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <div><h4 class="fw-800 mb-0" style="color:#1e293b"><i class="bi bi-list-task me-2" style="color:#f59e0b"></i>Antrian Pesanan</h4></div>
+    <h4 class="fw-bold mb-0 text-dark"><i class="bi bi-list-task me-2 text-warning"></i>Antrian Pesanan</h4>
 </div>
-<div class="card">
+
+<div class="card border-0 shadow-sm">
     <div class="card-body pb-0">
-        <form method="GET" action="/pegawai/antrian" class="row g-2 mb-3">
-            <div class="col-auto">
-                <?php foreach ([''=>'Semua','pending'=>'Pending','menunggu_konfirmasi'=>'Menunggu Konfirmasi','diproses'=>'Diproses','selesai'=>'Selesai','batal'=>'Batal'] as $v => $l): ?>
-                <a href="/pegawai/antrian<?= $v ? "?status=$v" : '' ?>"
-                   class="btn btn-sm <?= $status===$v ? 'btn-warning text-white' : 'btn-outline-secondary' ?> me-1 mb-1"><?= $l ?></a>
-                <?php endforeach; ?>
-            </div>
-        </form>
+        <div class="mb-3">
+            <?php 
+            // 1. Tambahkan 'siap diambil' ke dalam array filter
+            $filters = [''=>'Semua', 'pending'=>'Pending', 'diproses'=>'Diproses', 'siap diambil'=>'Siap Diambil', 'selesai'=>'Selesai'];
+            foreach ($filters as $v => $l): ?>
+                <a href="/pegawai/antrian<?= $v ? "?status=$v" : '' ?>" 
+                   class="btn btn-sm <?= $status===$v ? 'btn-warning text-white' : 'btn-outline-secondary' ?> me-1 mb-1">
+                   <?= $l ?>
+                </a>
+            <?php endforeach; ?>
+        </div>
     </div>
+
     <div class="table-responsive">
-        <table class="table table-hover align-top mb-0">
-            <thead>
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
                 <tr>
-                    <th class="ps-3">Kode & Waktu</th>
+                    <th class="ps-3">Pesanan</th>
                     <th>Pelanggan</th>
-                    <th>Item Pesanan</th>
+                    <th>Detail Item & Catatan</th>
                     <th>Total</th>
                     <th>Status</th>
-                    <th>Ubah Status</th>
+                    <th>Aksi</th>
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($pesanans as $p):
-                $items = $detailMap[$p->id] ?? [];
-            ?>
-            <tr>
-                <td class="ps-3">
-                    <strong><?= e($p->kode_pesanan) ?></strong><br>
-                    <small class="text-muted"><?= date('d M H:i', strtotime($p->created_at)) ?></small>
-                </td>
-                <td>
-                    <?= e($p->nama_pelanggan) ?><br>
-                    <small class="text-muted"><?= e($p->telepon ?? '') ?></small>
-                    <?php if (!empty($p->nomor_meja)): ?>
-                        <br><span class="badge bg-info text-dark">Meja <?= e($p->nomor_meja) ?></span>
-                    <?php endif; ?>
-                </td>
-                <td>
-                    <?php if (empty($items)): ?>
-                        <span class="text-muted">—</span>
-                    <?php else: ?>
-                        <?php foreach ($items as $item): ?>
-                            <div class="d-flex justify-content-between gap-3">
-                                <span><?= e($item->nama_produk) ?> <span class="text-muted">×<?= $item->jumlah ?></span></span>
-                                <span class="text-success fw-semibold text-nowrap"><?= formatRupiah($item->subtotal) ?></span>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </td>
-                <td class="fw-bold text-success"><?= formatRupiah($p->total_harga) ?></td>
-                <td>
-                    <?= statusBadge($p->status) ?>
-                    <?php if (!empty($p->status_bayar)): ?>
-                        <br><small><?= statusBadge($p->status_bayar) ?></small>
-                    <?php endif; ?>
-                </td>
-                <td>
-                    <form method="POST" action="/pegawai/update-status" class="d-flex gap-1">
-                        <input type="hidden" name="id" value="<?= $p->id ?>">
-                        <select name="status" class="form-select form-select-sm" style="width:130px"
-                            <?= in_array($p->status, ['selesai','batal']) ? 'disabled' : '' ?>>
-                            <?php foreach (['pending','menunggu_konfirmasi','diproses','selesai','batal'] as $s): ?>
-                            <option value="<?= $s ?>" <?= $p->status===$s?'selected':'' ?>>
-                                <?= ucfirst(str_replace('_',' ',$s)) ?>
-                            </option>
+                <?php foreach ($pesanans as $p): $items = $detailMap[$p->id] ?? []; ?>
+                <tr>
+                    <td class="ps-3">
+                        <div class="fw-bold text-primary"><?= e($p->kode_pesanan) ?></div>
+                        <small class="text-muted"><?= date('d M, H:i', strtotime($p->created_at)) ?></small>
+                    </td>
+                    <td>
+                        <div class="fw-semibold"><?= e($p->nama_pelanggan) ?></div>
+                        <span class="badge bg-info text-dark">Meja <?= e($p->nomor_meja) ?></span>
+                    </td>
+                    <td>
+                        <ul class="list-unstyled mb-0 small">
+                            <?php foreach ($items as $item): ?>
+                                <li class="border-bottom py-1">
+                                    <strong><?= e($item->nama_produk) ?></strong> x<?= (int)$item->jumlah ?>
+                                    <?php if (!empty($item->catatan)): ?>
+                                        <div class="text-info fst-italic">Note: <?= e($item->catatan) ?></div>
+                                    <?php endif; ?>
+                                </li>
                             <?php endforeach; ?>
-                        </select>
-                        <?php if (!in_array($p->status, ['selesai','batal'])): ?>
-                            <button type="submit" class="btn btn-sm btn-warning text-white fw-bold">✓</button>
-                        <?php else: ?>
-                            <button disabled class="btn btn-sm btn-secondary">✓</button>
-                        <?php endif; ?>
-                    </form>
-                </td>
-            </tr>
-            <?php endforeach; ?>
-            <?php if (empty($pesanans)): ?>
-            <tr><td colspan="6" class="text-center py-5 text-muted">Tidak ada pesanan</td></tr>
-            <?php endif; ?>
+                        </ul>
+                    </td>
+                    <td class="fw-bold text-success"><?= formatRupiah((float)$p->total_harga) ?></td>
+                    <td><?= statusBadge($p->status) ?></td>
+                    <td>
+                        <form method="POST" action="/pegawai/update-status" class="input-group input-group-sm">
+                            <input type="hidden" name="id" value="<?= $p->id ?>">
+                            <select name="status" class="form-select border-primary">
+                                <?php foreach (['pending', 'diproses', 'siap diambil', 'selesai', 'batal'] as $s): ?>
+                                    <option value="<?= $s ?>" <?= $p->status === $s ? 'selected' : '' ?>>
+                                        <?= ucfirst(str_replace('_', ' ', $s)) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-check"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
             </tbody>
         </table>
     </div>

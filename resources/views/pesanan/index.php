@@ -2,7 +2,6 @@
 <div class="page-header d-flex justify-content-between align-items-center">
     <div><h4><i class="bi bi-receipt me-2" style="color:var(--accent)"></i>Pesanan</h4>
         <small>Kelola data pesanan pelanggan</small></div>
-    <a href="/pesanan/create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Buat Pesanan</a>
 </div>
 <div class="card">
     <div class="card-body pb-0">
@@ -38,7 +37,6 @@
                 <th>Total</th>
                 <th>Status</th>
                 <th>Catatan</th>
-                <th class="text-center">Aksi</th>
             </tr></thead>
             <tbody>
             <?php if (empty($pesanans)): ?>
@@ -50,17 +48,11 @@
                 <td><strong><?= e($p->kode_pesanan) ?></strong></td>
                 <td><?= e($p->nama_pelanggan) ?><br><small class="text-muted"><?= e($p->telepon ?: '') ?></small></td>
                 <td><?= e($p->nama_produk ?? '-') ?></td>
-                <td><?= $p->jumlah ?></td>
+                <td><?= $p->jumlah ?? 0 ?></td>
                 <td><?= formatRupiah($p->total_harga) ?></td>
                 <td><?= statusBadge($p->status) ?></td>
                 <td class="text-muted" style="max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= e($p->catatan ?: '-') ?></td>
-                <td class="text-center">
-                    <a href="/pesanan/edit?id=<?= $p->id ?>" class="btn btn-sm btn-outline-primary btn-action me-1"><i class="bi bi-pencil"></i></a>
-                    <form method="POST" action="/pesanan/delete" class="d-inline" onsubmit="return confirm('Hapus pesanan ini?')">
-                        <input type="hidden" name="id" value="<?= $p->id ?>">
-                        <button class="btn btn-sm btn-outline-danger btn-action"><i class="bi bi-trash"></i></button>
-                    </form>
-                </td>
+                
             </tr>
             <?php endforeach; ?>
             <?php endif; ?>

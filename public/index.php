@@ -1,15 +1,21 @@
 <?php
+
 define('BASE_PATH', dirname(__DIR__));
 define('APP_NAME', 'UMKM App');
 
 date_default_timezone_set('Asia/Jakarta');
 
+
 session_start();
+
+
 
 require_once BASE_PATH . '/app/Database.php';
 require_once BASE_PATH . '/app/helpers.php';
 require_once BASE_PATH . '/app/Controllers/AuthController.php';
 require_once BASE_PATH . '/app/Controllers/CustomerController.php';
+require_once BASE_PATH . '/app/Controllers/CustomerPembayaranController.php';
+
 require_once BASE_PATH . '/app/Controllers/PegawaiDashboardController.php';
 require_once BASE_PATH . '/app/Controllers/ProdukController.php';
 require_once BASE_PATH . '/app/Controllers/PegawaiController.php';
@@ -20,7 +26,11 @@ require_once BASE_PATH . '/app/Controllers/UlasanController.php';
 require_once BASE_PATH . '/app/Controllers/RekapController.php';
 require_once BASE_PATH . '/app/Controllers/InventarisController.php';
 require_once BASE_PATH . '/app/Controllers/SupplierController.php';
-
+if (isset($_GET['url']) && $_GET['url'] === 'customer/pesanan-status') {
+    $id = (int)($_GET['id'] ?? 0);
+    (new CustomerPembayaranController())->showStatus($id);
+    exit; 
+}
 Database::getInstance();
 
 $uri    = rtrim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/') ?: '/';
@@ -83,8 +93,9 @@ $routes = [
         $produkTerlaris = [];
         if ($tableExists) {
             $produkTerlaris = $db->query("
-                SELECT pr.nama,
-                       SUM(dp.jumlah) AS total
+                SELECT
+                    pr.nama,
+                    SUM(dp.jumlah) AS total
                 FROM detail_pesanan dp
                 JOIN produk pr ON pr.id = dp.produk_id
                 GROUP BY dp.produk_id, pr.nama
@@ -95,31 +106,24 @@ $routes = [
 
         // Fallback: pakai COUNT baris pesanan via kolom produk_id lama
         if (empty($produkTerlaris)) {
-            $produkTerlaris = $db->query("
-                SELECT pr.nama,
-                       COUNT(ps.id) AS total
-                FROM pesanan ps
-                JOIN produk pr ON pr.id = ps.produk_id
-                WHERE ps.produk_id IS NOT NULL
-                GROUP BY ps.produk_id, pr.nama
-                ORDER BY total DESC
-                LIMIT 5
-            ")->fetchAll();
+            $produkTerlaris = [];
         }
 
         // ── Pesanan terbaru: ambil nama produk dari detail_pesanan atau produk_id lama ──
         $pesananTerbaru = $db->query("
-            SELECT ps.*,
-                   COALESCE(
-                       (SELECT dp.nama_produk
+            SELECT
+                ps.*,
+                COALESCE(
+                    (
+                        SELECT dp.nama_produk
                         FROM detail_pesanan dp
                         WHERE dp.pesanan_id = ps.id
-                        ORDER BY dp.id ASC LIMIT 1),
-                       pr.nama,
-                       '-'
-                   ) AS nama_produk
+                        ORDER BY dp.id ASC
+                        LIMIT 1
+                    ),
+                    '-'
+                ) AS nama_produk
             FROM pesanan ps
-            LEFT JOIN produk pr ON pr.id = ps.produk_id
             ORDER BY ps.created_at DESC
             LIMIT 8
         ")->fetchAll();
@@ -314,10 +318,7 @@ $routes = [
         redirect('/customer/identitas');
     },
     // QRIS & konfirmasi bayar — bypass admin requireRole
-    'GET /customer/qris' => function() {
-        $controller = new PembayaranController(false);
-        $controller->showQris();
-    },
+
     'POST /customer/sudah-bayar' => function() {
         $controller = new PembayaranController(false);
         $controller->konfirmasiSudahBayar();
@@ -329,6 +330,8 @@ $routes = [
     'POST /customer/keranjang/tambah' => fn() => (new CustomerController())->tambahKeranjang(),
     'POST /customer/keranjang/hapus'  => fn() => (new CustomerController())->hapusKeranjang(),
     'POST /customer/keranjang/kosongkan' => fn() => (new CustomerController())->kosongkanKeranjang(),
+    'GET /customer/checkout' => fn() => (new CustomerController())->checkout(),
+
     'GET /customer/pesanan-saya'   => fn() => (new CustomerController())->pesananSaya(),
     'GET /customer/buat-pesanan'   => fn() => (new CustomerController())->buatPesanan(),
     'POST /customer/buat-pesanan'  => fn() => (new CustomerController())->storePesanan(),
@@ -344,9 +347,25 @@ $routes = [
     'POST /customer/ulasan/delete' => fn() => (new UlasanController())->destroy(),
     'GET /customer/profile'        => fn() => (new CustomerController())->profile(),
     'POST /customer/profile'       => fn() => (new CustomerController())->updateProfile(),
-
-    // ── Static uploads ───────────────────────────────────────────────
-    'GET /uploads/bukti' => function() {
+  // Perbaikan rute: gunakan fungsi anonim (fn) agar controller di-instansiasi dengan 'new'
+'GET /customer/qris' => fn() => (new CustomerPembayaranController())->tampilkanBayar(),
+'POST /customer/final-store' => fn() => (new CustomerPembayaranController())->finalStore(),
+'GET /customer/pesanan-status' => function() {
+    // Gunakan $_GET['id'] untuk menangkap ID dari URL ?id=5
+    $id = $_GET['id'] ?? null; 
+    
+    if ($id) {
+        (new CustomerPembayaranController())->showStatus((int)$id);
+    } else {
+        // Jika tidak ada ID, coba ambil dari session agar tidak error
+        if (isset($_SESSION['last_pesanan_id'])) {
+             (new CustomerPembayaranController())->showStatus((int)$_SESSION['last_pesanan_id']);
+        } else {
+             echo "ID pesanan tidak ditemukan.";
+        }
+    }
+},
+  'GET /uploads/bukti' => function() {
         $file = BASE_PATH . '/public/uploads/bukti/' . basename($_GET['file'] ?? '');
         if (file_exists($file)) { readfile($file); } else { http_response_code(404); echo "File not found"; }
     },
