@@ -41,13 +41,10 @@
     </a>
     <div class="d-flex align-items-center gap-1 overflow-auto">
         <a href="/customer/katalog"      class="nav-link-top <?= $curUri==='/customer/katalog'?'active':'' ?>"><i class="bi bi-grid"></i><span class="d-none d-md-inline">Pesan Ulang</span></a>
-            <a href="/customer/pesanan-status?id=<?= $_SESSION['customer']['id_pesanan_terakhir'] ?? '' ?>" 
-            class="nav-link-top <?= str_starts_with($curUri,'/customer/pesanan')?'active':'' ?>">
-            <i class="bi bi-receipt"></i>
-            </a>        <a href="/customer/ulasan" class="nav-link-top <?= str_starts_with($curUri, '/customer/ulasan') ? 'active' : '' ?>">
+            
+        <a href="/customer/ulasan" class="nav-link-top <?= str_starts_with($curUri, '/customer/ulasan') ? 'active' : '' ?>">
             <i class="bi bi-star"></i><span class="d-none d-md-inline">Ulasan</span>
         </a>
-        <a href="/logout" class="nav-link-top text-danger"><i class="bi bi-box-arrow-right"></i></a>
     </div>
 </nav>
 <div class="content-area">
