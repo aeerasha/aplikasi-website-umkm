@@ -64,6 +64,11 @@
             <div class="role-row"><span><i class="bi bi-shield-check text-danger me-1"></i><strong>Admin</strong></span><span class="text-muted">admin@umkm.com / admin123</span></div>
             <div class="role-row"><span><i class="bi bi-person-badge text-warning me-1"></i><strong>Pegawai</strong></span><span class="text-muted">budi@umkm.com / pegawai123</span></div>
         </div>
+        <div class="mt-3">
+            <a href="/customer/identitas" class="btn btn-outline-secondary w-100">
+                <i class="bi bi-cart-plus me-1"></i> Pesan sebagai Customer
+            </a>
+        </div>
     </div>
 </div>
 </body>
