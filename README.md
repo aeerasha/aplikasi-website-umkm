@@ -1,4 +1,4 @@
-# Aplikasi UMKM — Laravel-Style PHP MVC
+# Aplikasi UMKM
 
 Proyek: **Pengembangan Aplikasi untuk UMKM**  
 Manager: Shahira
